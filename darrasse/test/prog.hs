@@ -1,8 +1,11 @@
-{-# OPTIONS_GHC -fglasgow-exts #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
-import Data.Generics
-import Gen
-import Test.QuickCheck.Gen
+import           Gen
+import           GHC.Generics
+import           Test.QuickCheck.Gen
+
+import           Data.Data
+import           Data.Typeable
 
 data Prog = Prog Dec Stat deriving (Typeable, Data, Show)
 data Dec  = Nodec | Ondec Id Type | Manydecs Dec Dec deriving (Typeable, Data, Show)

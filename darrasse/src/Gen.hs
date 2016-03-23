@@ -1,12 +1,12 @@
 module Gen (toGen) where
-import Data.Generics
-import Data.List
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Test.QuickCheck
-import Monad
-import Def
-import Combstruct
+import           Combstruct
+import           Control.Monad
+import           Data.Generics
+import           Data.List
+import           Data.Map        (Map)
+import qualified Data.Map        as Map
+import           Def
+import           Test.QuickCheck
 -- import Debug.Trace
 
 -- TODO remove Int from Ref

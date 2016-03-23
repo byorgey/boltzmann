@@ -12,3 +12,5 @@ TAGS
 .diagrams-cache
 .cabal-sandbox/
 cabal.sandbox.config
+
+darrasse/test/prog

@@ -1,65 +1,122 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Oracle where
 
-import Data.Array.IArray
+import           Data.Array.IArray
+import           Data.Function     (on)
+import           Data.List         (foldl')
 
-data CombEq = N | E | A | S CombEq CombEq | P CombEq CombEq | R Int deriving Show
+-- | Combinatorial expressions in a variable X, which can make up a
+--   combinatorial system of the form (Y_0, Y_1, ..., Y_n) = (exp_0,
+--   exp_1, ..., exp_n).  They consist of 0, 1, X, sums, products, and
+--   references to other Y_i.
+data CombExp
+  = Zero
+  | One
+  | X
+  | (:+:) CombExp CombExp
+  | (:*:) CombExp CombExp
+  | Y Int
+  deriving Show
 
-eval_eq :: Double -> Array Int Double -> CombEq -> Double
-eval_eq z y N = 0.0
-eval_eq z y E = 1.0
-eval_eq z y A = z
-eval_eq z y (S e1 e2) = eval_eq z y e1 + eval_eq z y e2
-eval_eq z y (P e1 e2) = eval_eq z y e1 * eval_eq z y e2
-eval_eq z y (R i) = y ! i
+-- | A combinatorial system is an array of combinatorial expressions.
+type CombSys = Array Int CombExp
 
-diff_eq :: Int -> CombEq -> CombEq
-diff_eq i N = N
-diff_eq i E = N
-diff_eq i A = N
-diff_eq i (S e1 e2) = S (diff_eq i e1) (diff_eq i e2)
-diff_eq i (P e1 e2) = S (P (diff_eq i e1) e2) (P e1 (diff_eq i e2))
-diff_eq i (R j) | i == j = E
-                | otherwise = N
+-- | Evaluate a combinatorial expression, given a value for the
+--   variable X and values for all the y_i.
+eval :: Double -> Array Int Double -> CombExp -> Double
+eval z y Zero        = 0
+eval z y One         = 1
+eval z y X           = z
+eval z y (e1 :+: e2) = eval z y e1 + eval z y e2
+eval z y (e1 :*: e2) = eval z y e1 * eval z y e2
+eval z y (Y i)       = y ! i
 
-simplify :: CombEq -> CombEq
-simplify (S e1 e2) = case ((simplify e1), (simplify e2)) of
-                       (N, e) -> e
-                       (e, N) -> e
-                       (e1',e2') -> S e1' e2'
-simplify (P e1 e2) = case ((simplify e1), (simplify e2)) of
-                       (N, e) -> N
-                       (e, N) -> N
-                       (E, e) -> e
-                       (e, E) -> e
-                       (e1', e2') -> P e1' e2'
+-- | Partial differentiation with respect to one of the y_i.
+diff :: Int -> CombExp -> CombExp
+diff i Zero        = Zero
+diff i One         = Zero
+diff i X           = Zero  -- Note this is zero, not one, since we are
+                           -- differentiating with respect to y_i, not
+                           -- X.
+diff i (e1 :+: e2) = (diff i e1) :+: (diff i e2)
+diff i (e1 :*: e2) = (diff i e1 :*: e2) :+: (e1 :*: diff i e2)
+diff i (Y j) | i == j    = One
+             | otherwise = Zero
+
+-- | Simplify a combinatorial expression, recursively removing trivial
+--   sums and products.  Note this doesn't distribute products over
+--   sums or anything more sophisticated.
+simplify :: CombExp -> CombExp
+simplify (e1 :+: e2) =
+  case (simplify e1, simplify e2) of
+    (Zero, e)  -> e
+    (e, Zero)  -> e
+    (e1', e2') -> e1' :+: e2'
+simplify (e1 :*: e2) =
+  case (simplify e1, simplify e2) of
+    (Zero, e)  -> Zero
+    (e, Zero)  -> Zero
+    (One, e)   -> e
+    (e, One)   -> e
+    (e1', e2') -> e1' :*: e2'
 simplify e = e
 
-class CombSysState state where
-  zeroState :: CombSys -> state
-  stateToList :: state -> [Double]
-  iter :: CombSys -> Double -> state -> state
+-- | Types which keep track of the state needed for a combinatorial
+--   system solver.
+class CombSysState s where
+  zeroState   :: CombSys -> s                 -- ^ Initial state
+  stateToList :: s -> [Double]                -- ^ Get a current list of values for Y_i
+  iter        :: CombSys -> Double -> s -> s  -- ^ Perform one iteration
 
-type CombSys = Array Int CombEq
+-- | Check whether a solver has diverged: when any of the XXX values
+--   are NaN, negative, or too big (defined as 1 divided by the
+--   precision).
+hasDiverged :: (CombSysState s) => Double -> s -> Bool
+hasDiverged prec = any (\x -> isNaN x || x < 0 || x > 1.0/prec) . stateToList
 
-has_diverged :: (CombSysState state) => state -> Double -> Bool
-has_diverged st prec = or $ map (\x -> isNaN x || x < 0 || x > 1.0/prec) $ stateToList st
+-- | Check whether a solver has converged, i.e. the values of two
+--   consecutive states have not changed by more than the specified
+--   precision.
+hasConverged :: (CombSysState s) => Double -> s -> s -> Bool
+hasConverged prec s1 s2 = (foldl' max 0 $ (zipWith absDiff `on` stateToList) s1 s2) < prec
+  where
+    absDiff a b = abs (a - b)
 
-eval_sys :: (CombSysState state) => CombSys -> Double -> Double -> state
-eval_sys sys z prec =
-  aux $ zeroState sys
-  where aux y = let y' = iter sys z y in
-                if (foldl max 0.0 $ map abs $ zipWith (-) (stateToList y') (stateToList y)) < prec then
-                  y'
-                else
-                  aux y'
+-- | Evaluate a combinatorial system at a given value of z.
+--   Evaluation proceeds by iterating until the values change by less
+--   than the specified precision.
+evalSys :: (CombSysState s) => CombSys -> Double -> Double -> s
+evalSys sys z prec = go $ zeroState sys
+  where
+    go y
+      | hasConverged prec y y' =    y'
+      | otherwise              = go y'
+      where
+        y' = iter sys z y
 
-sing_sys :: (CombSysState state) => CombSys -> Double -> Double -> (Double, state)
-sing_sys sys prec1 prec2 =
-  aux 0.0 1.0 `asTypeOf` foo
-  where aux zmin zmax | zmax - zmin < prec1 = (zmin, eval_sys sys zmin prec2)
-                      | otherwise = if has_diverged (eval_sys sys z prec2 `asTypeOf` snd foo) prec1 then
-                                      aux zmin z
-                                    else
-                                      aux z zmax
-                      where z = (zmax + zmin) / 2
-        foo = (undefined, undefined) :: (CombSysState state) => (Double, state)
+-- | Find the least singularity of a combinatorial system on the
+--   interval [0,1] using binary search.  That is, we want to find the
+--   smallest value of z on [0,1] such that the system diverges when
+--   evaluated at z.  Returns both the value of z as well as the state
+--   of the system at that z.
+--
+--   The first argument @precS@ is the search precision: the search
+--   will be stopped when the size of the search interval is smaller
+--   than @precS@; also, the combinatorial system will be considered
+--   to have diverged when the value of one of the y_i is larger than
+--   @1/precS@.  The second argument @precV@ is the value precision:
+--   when evaluating the combinatorial system, we continue iterating
+--   until the values change by less than @precV@.
+singularity :: forall s. CombSysState s => Double -> Double -> CombSys -> (Double, s)
+singularity precS precV sys = go 0 1
+  where
+    go :: CombSysState s => Double -> Double -> (Double, s)
+    go zmin zmax
+      -- If we've converged sufficiently, just return zmin
+      | zmax - zmin < precS                             = (zmin, evalSys sys zmin precV)
+      -- If the system diverges @ zmid, then zmid is too big
+      | hasDiverged precS (evalSys sys zmid precV :: s) = go zmin zmid
+      -- Otherwise, zmid is too small
+      | otherwise                                       = go zmid zmax
+      where zmid = (zmax + zmin) / 2

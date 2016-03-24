@@ -1,28 +1,28 @@
 module Combstruct (Oracle, defsToOracle) where
 
-import Data.Generics (dataTypeName)
-import Data.List (sortBy)
-import Data.Map (Map)
-import Data.Array.IArray
-import qualified Data.Map as Map
-import Def
-import Oracle
+import           Data.Array.IArray
+import           Data.Generics     (dataTypeName)
+import           Data.List         (sortBy)
+import           Data.Map          (Map)
+import qualified Data.Map          as Map
+import           Def
+import           Oracle
 -- import Oracle.Simple
-import Oracle.Newton
+import           Oracle.Newton
 
 type Oracle = Map String Double
 
-refToComb :: Ref -> CombEq
+refToComb :: Ref -> CombExp
 refToComb (Ref 0 s) = error "Impossible: nil reference"
-refToComb (Ref i s) = R i
+refToComb (Ref i s) = Y i
 
-prodToComb :: Prod -> CombEq
-prodToComb (Prod rs) = foldl P A $ map refToComb rs
+prodToComb :: Prod -> CombExp
+prodToComb (Prod rs) = foldl (:*:) X $ map refToComb rs
 
-sumToComb :: Sum -> CombEq
-sumToComb (Sum ps) = foldl1 S $ map prodToComb ps
+sumToComb :: Sum -> CombExp
+sumToComb (Sum ps) = foldl1 (:+:) $ map prodToComb ps
 
-defToComb :: Def -> CombEq
+defToComb :: Def -> CombExp
 defToComb (Def _ s) = sumToComb s
 
 defsToComb :: Defs -> CombSys
@@ -36,9 +36,11 @@ valPrecision :: Double
 valPrecision = 1.0e-6
 
 combToVals :: CombSys -> [Double]
-combToVals sys = stateToList st
-               where st :: State
-                     st = snd $ sing_sys sys singPrecision valPrecision
+combToVals
+  = stateToList
+  . (id :: State -> State)
+  . snd
+  . singularity singPrecision valPrecision
 
 defsToOracle :: Defs -> Oracle
 defsToOracle (Defs m) =

@@ -13,4 +13,4 @@ TAGS
 .cabal-sandbox/
 cabal.sandbox.config
 
-darrasse/test/prog
+gen/test/prog

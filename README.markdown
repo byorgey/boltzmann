@@ -1,4 +1,4 @@
-Boltzmann sampling for random generation of algebraic data types.
+Boltzmann sampling for random generation of algebraic data types in Haskell.
 
 For background, see:
 

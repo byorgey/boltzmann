@@ -2,7 +2,6 @@ module Combstruct (Oracle, defsToOracle) where
 
 import           Data.Array.IArray
 import           Data.Generics     (dataTypeName)
-import           Data.List         (sortBy)
 import           Data.Map          (Map)
 import qualified Data.Map          as Map
 import           Def
@@ -12,12 +11,12 @@ import           Oracle.Newton
 
 type Oracle = Map String Double
 
-refToComb :: Ref -> CombExp
-refToComb (Ref 0 s) = error "Impossible: nil reference"
-refToComb (Ref i s) = Y i
+varToComb :: Var -> CombExp
+varToComb (Var 0 _) = error "Impossible: nil reference"
+varToComb (Var i _) = Y i
 
 prodToComb :: Prod -> CombExp
-prodToComb (Prod rs) = foldl (:*:) X $ map refToComb rs
+prodToComb (Prod rs) = foldl (:*:) X $ map varToComb rs
 
 sumToComb :: Sum -> CombExp
 sumToComb (Sum ps) = foldl1 (:+:) $ map prodToComb ps

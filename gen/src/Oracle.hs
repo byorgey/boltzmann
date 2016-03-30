@@ -25,18 +25,18 @@ type CombSys = Array Int CombExp
 -- | Evaluate a combinatorial expression, given a value for the
 --   variable X and values for all the y_i.
 eval :: Double -> Array Int Double -> CombExp -> Double
-eval z y Zero        = 0
-eval z y One         = 1
-eval z y X           = z
+eval _ _ Zero        = 0
+eval _ _ One         = 1
+eval z _ X           = z
 eval z y (e1 :+: e2) = eval z y e1 + eval z y e2
 eval z y (e1 :*: e2) = eval z y e1 * eval z y e2
-eval z y (Y i)       = y ! i
+eval _ y (Y i)       = y ! i
 
 -- | Partial differentiation with respect to one of the y_i.
 diff :: Int -> CombExp -> CombExp
-diff i Zero        = Zero
-diff i One         = Zero
-diff i X           = Zero  -- Note this is zero, not one, since we are
+diff _ Zero        = Zero
+diff _ One         = Zero
+diff _ X           = Zero  -- Note this is zero, not one, since we are
                            -- differentiating with respect to y_i, not
                            -- X.
 diff i (e1 :+: e2) = (diff i e1) :+: (diff i e2)
@@ -55,8 +55,8 @@ simplify (e1 :+: e2) =
     (e1', e2') -> e1' :+: e2'
 simplify (e1 :*: e2) =
   case (simplify e1, simplify e2) of
-    (Zero, e)  -> Zero
-    (e, Zero)  -> Zero
+    (Zero, _)  -> Zero
+    (_, Zero)  -> Zero
     (One, e)   -> e
     (e, One)   -> e
     (e1', e2') -> e1' :*: e2'

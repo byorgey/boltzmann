@@ -46,7 +46,7 @@ jacobian sys = array ((li, li), (ui, ui)) list
 newtype State = NewtonState (Array Int Double, Array (Int, Int) Double)
 instance CombSysState State where
   zeroState sys = NewtonState ((listArray (bounds sys) (repeat 0.0)), identity (bounds sys))
-  stateToList (NewtonState (y,u)) = elems y
+  stateToList (NewtonState (y,_)) = elems y
   iter sys z (NewtonState (y,u)) =
     let jac = amap (eval z y) (jacobian sys)
         u' = matAdd (matMult u (matSub (matMult jac u) (matSub u (identity (bounds sys))))) u
